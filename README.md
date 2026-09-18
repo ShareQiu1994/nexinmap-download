@@ -4,7 +4,7 @@
 
 当前版本：[0.1.0](https://github.com/ShareQiu1994/nexinmap-downloader-ci/releases/tag/v0.1.0)
 
-支持 Windows、Linux、macOS Intel 和 Apple Silicon。macOS 安装包尚未进行 Apple Developer ID 签名与公证，部分系统仍可能显示安全提示。
+支持 Windows、Linux、macOS Intel 和 Apple Silicon。
 
 ## 下载
 
@@ -26,8 +26,6 @@
 - 栅格与瓦片互转、瓦片转 ArcGIS、瓦片与 MBTiles 互转
 - 矢量转换、文件坐标转换、高斯计算
 
-## 任务与授权
+## 任务
 
-- 任务可以暂停、继续。升级不会删除已有任务、历史记录、输出文件、下载范围书签、设置或瓦片缓存
-- 未授权时不能下载，也不能使用工具转换。可以申请试用，或购买 90 天、180 天、365 天和永久授权
-- 在「关于」里检查更新。国内优先从 [nexinmap.com](https://nexinmap.com/packages/latest/update.json) 获取安装包，打不开时再使用本仓库的 Releases
+- 任务可以暂停、继续，并查看历史记录
