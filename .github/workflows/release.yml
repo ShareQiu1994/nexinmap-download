@@ -147,6 +147,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    outputs:
+      version: ${{ steps.version.outputs.VERSION }}
 
     steps:
       - name: Check source token
@@ -194,3 +196,56 @@ jobs:
             macOS 安装包尚未进行 Apple Developer ID 签名与公证，部分系统仍可能显示安全提示。
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  mirror:
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check mirror secrets
+        run: |
+          if [ -z "${{ secrets.MIRROR_HOST }}" ] || [ -z "${{ secrets.MIRROR_USER }}" ] || [ -z "${{ secrets.MIRROR_SSH_KEY }}" ]; then
+            echo "缺少镜像 Secrets：MIRROR_HOST、MIRROR_USER、MIRROR_SSH_KEY"
+            exit 1
+          fi
+
+      - name: Download release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p artifacts
+          gh release download "v${{ needs.release.outputs.version }}" \
+            --repo "${{ github.repository }}" \
+            --pattern "nexinmap-downloader_*" \
+            --dir artifacts
+          gh api "repos/${{ github.repository }}/releases/tags/v${{ needs.release.outputs.version }}" \
+            | jq --arg base "https://nexinmap.com/packages/latest/" '{
+                tag_name,
+                html_url,
+                body,
+                draft,
+                prerelease,
+                assets: [.assets[] | {
+                  name,
+                  size,
+                  browser_download_url: ($base + .name)
+                }]
+              }' > artifacts/update.json
+          ls -la artifacts/
+
+      - name: Upload to mirror
+        env:
+          MIRROR_HOST: ${{ secrets.MIRROR_HOST }}
+          MIRROR_USER: ${{ secrets.MIRROR_USER }}
+          MIRROR_SSH_KEY: ${{ secrets.MIRROR_SSH_KEY }}
+          VERSION: ${{ needs.release.outputs.version }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$MIRROR_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          SSH_OPTS=(-i "$HOME/.ssh/id_ed25519" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20)
+          ssh "${SSH_OPTS[@]}" "$MIRROR_USER@$MIRROR_HOST" \
+            "mkdir -p /home/liubf/nexinmap/packages/v${VERSION} /home/liubf/nexinmap/packages/latest"
+          scp "${SSH_OPTS[@]}" artifacts/* \
+            "$MIRROR_USER@$MIRROR_HOST:/home/liubf/nexinmap/packages/v${VERSION}/"
+          ssh "${SSH_OPTS[@]}" "$MIRROR_USER@$MIRROR_HOST" \
+            "rm -f /home/liubf/nexinmap/packages/latest/* && cp -a /home/liubf/nexinmap/packages/v${VERSION}/. /home/liubf/nexinmap/packages/latest/ && ls -la /home/liubf/nexinmap/packages/latest"
