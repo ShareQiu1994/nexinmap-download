@@ -1,9 +1,6 @@
 name: Build installers
 
 on:
-  push:
-    tags:
-      - 'v*'
   workflow_dispatch:
 
 jobs:
@@ -31,8 +28,21 @@ jobs:
         shell: bash
 
     steps:
-      - name: Checkout
+      - name: Check source token
+        run: |
+          if [ -z "${{ secrets.SOURCE_TOKEN }}" ]; then
+            echo "缺少 Actions Secret：SOURCE_TOKEN"
+            echo "请在本仓库 Settings → Secrets → Actions 中添加，令牌只需能读取私有仓库 ShareQiu1994/nexinmap-downloader。"
+            exit 1
+          fi
+
+      - name: Checkout private source
         uses: actions/checkout@v4
+        with:
+          repository: ShareQiu1994/nexinmap-downloader
+          ref: main
+          token: ${{ secrets.SOURCE_TOKEN }}
+          path: app
 
       - name: Install Linux dependencies
         if: matrix.platform == 'ubuntu-22.04'
@@ -48,17 +58,17 @@ jobs:
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
-          workspaces: './src-tauri -> target'
+          workspaces: app/src-tauri -> target
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: app/frontend/package-lock.json
 
       - name: Install frontend dependencies
-        working-directory: frontend
+        working-directory: app/frontend
         run: |
           set -e
           for i in 1 2 3; do
@@ -79,12 +89,13 @@ jobs:
         run: cargo binstall -y --locked tauri-cli@^2
 
       - name: Build
+        working-directory: app
         run: cargo tauri build --target ${{ matrix.target }}
 
       - name: Verify macOS app signature
         if: matrix.platform == 'macos-latest'
         run: |
-          DMG=$(find "src-tauri/target/${{ matrix.target }}/release/bundle/dmg" -type f -name "*.dmg" | head -1)
+          DMG=$(find "app/src-tauri/target/${{ matrix.target }}/release/bundle/dmg" -type f -name "*.dmg" | head -1)
           test -n "$DMG"
           MOUNT_DIR=$(mktemp -d)
           trap 'hdiutil detach "$MOUNT_DIR" >/dev/null 2>&1 || true; rm -rf "$MOUNT_DIR"' EXIT
@@ -97,14 +108,14 @@ jobs:
       - name: Get version
         id: version
         run: |
-          VERSION=$(grep '"version"' src-tauri/tauri.conf.json | head -1 | sed 's/.*: *"\(.*\)".*/\1/')
+          VERSION=$(grep '"version"' app/src-tauri/tauri.conf.json | head -1 | sed 's/.*: *"\(.*\)".*/\1/')
           echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Collect Windows artifacts
         if: matrix.platform == 'windows-latest'
         shell: pwsh
         run: |
-          $exeFile = Get-ChildItem -Path "src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*-setup.exe" | Select-Object -First 1
+          $exeFile = Get-ChildItem -Path "app/src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*-setup.exe" | Select-Object -First 1
           $newName = "nexinmap-downloader_${{ steps.version.outputs.VERSION }}_windows_x64-setup.exe"
           Copy-Item $exeFile.FullName -Destination $newName
 
@@ -112,15 +123,15 @@ jobs:
         if: matrix.platform == 'macos-latest'
         run: |
           ARCH=$([[ "${{ matrix.target }}" == *aarch64* ]] && echo "arm64" || echo "x64")
-          DMG=$(find "src-tauri/target/${{ matrix.target }}/release/bundle/dmg" -name "*.dmg" | head -1)
+          DMG=$(find "app/src-tauri/target/${{ matrix.target }}/release/bundle/dmg" -name "*.dmg" | head -1)
           NEW_NAME="nexinmap-downloader_${{ steps.version.outputs.VERSION }}_macos_${ARCH}.dmg"
           cp "$DMG" "$NEW_NAME"
 
       - name: Collect Linux artifacts
         if: matrix.platform == 'ubuntu-22.04'
         run: |
-          DEB=$(find "src-tauri/target/${{ matrix.target }}/release/bundle/deb" -name "*.deb" | head -1)
-          APPIMAGE=$(find "src-tauri/target/${{ matrix.target }}/release/bundle/appimage" -name "*.AppImage" | head -1)
+          DEB=$(find "app/src-tauri/target/${{ matrix.target }}/release/bundle/deb" -name "*.deb" | head -1)
+          APPIMAGE=$(find "app/src-tauri/target/${{ matrix.target }}/release/bundle/appimage" -name "*.AppImage" | head -1)
           cp "$DEB" "nexinmap-downloader_${{ steps.version.outputs.VERSION }}_linux_amd64.deb"
           cp "$APPIMAGE" "nexinmap-downloader_${{ steps.version.outputs.VERSION }}_linux_amd64.AppImage"
 
@@ -138,13 +149,25 @@ jobs:
       contents: write
 
     steps:
-      - name: Checkout
+      - name: Check source token
+        run: |
+          if [ -z "${{ secrets.SOURCE_TOKEN }}" ]; then
+            echo "缺少 Actions Secret：SOURCE_TOKEN"
+            exit 1
+          fi
+
+      - name: Checkout private source
         uses: actions/checkout@v4
+        with:
+          repository: ShareQiu1994/nexinmap-downloader
+          ref: main
+          token: ${{ secrets.SOURCE_TOKEN }}
+          path: app
 
       - name: Get version
         id: version
         run: |
-          VERSION=$(grep '"version"' src-tauri/tauri.conf.json | head -1 | sed 's/.*: *"\(.*\)".*/\1/')
+          VERSION=$(grep '"version"' app/src-tauri/tauri.conf.json | head -1 | sed 's/.*: *"\(.*\)".*/\1/')
           echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
           if [[ "$VERSION" == *"-"* ]]; then
             echo "PRERELEASE=true" >> "$GITHUB_OUTPUT"

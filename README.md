@@ -1,7 +1,7 @@
 # nexinmap-downloader-ci
 
-公开仓库，用来编译并发布安装包。
+公开仓库，只负责编译并发布安装包。产品源码在私有仓库 [nexinmap-downloader](https://github.com/ShareQiu1994/nexinmap-downloader)。
 
-推送 `v*` 标签，或在 Actions 里手动运行 **Build installers**。GitHub 会在 Windows、Linux 和 macOS 上编译，并把安装包挂到本仓库的 Releases。
+在 Actions 里手动运行 **Build installers**。流水线用 Secret `SOURCE_TOKEN` 读取私有源码，在 GitHub 的 Windows、Linux、macOS 上编译，再把安装包挂到本仓库的 Releases。
 
 检查更新地址：`https://api.github.com/repos/ShareQiu1994/nexinmap-downloader-ci/releases/latest`
