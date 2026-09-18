@@ -1,6 +1,9 @@
 name: Build installers
 
 on:
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
 
 jobs:
@@ -28,17 +31,8 @@ jobs:
         shell: bash
 
     steps:
-      - name: Clone private source
-        env:
-          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
-        run: |
-          if [ -z "${GITEE_TOKEN}" ]; then
-            echo "缺少 Actions Secret：GITEE_TOKEN"
-            exit 1
-          fi
-          git clone --depth 1 --branch main \
-            "https://oauth2:${GITEE_TOKEN}@gitee.com/liu-bofang/nexin-map-download.git" \
-            app
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Install Linux dependencies
         if: matrix.platform == 'ubuntu-22.04'
@@ -54,17 +48,17 @@ jobs:
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
-          workspaces: app/src-tauri -> target
+          workspaces: './src-tauri -> target'
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: app/frontend/package-lock.json
+          cache-dependency-path: frontend/package-lock.json
 
       - name: Install frontend dependencies
-        working-directory: app/frontend
+        working-directory: frontend
         run: |
           set -e
           for i in 1 2 3; do
@@ -85,13 +79,12 @@ jobs:
         run: cargo binstall -y --locked tauri-cli@^2
 
       - name: Build
-        working-directory: app
         run: cargo tauri build --target ${{ matrix.target }}
 
       - name: Verify macOS app signature
         if: matrix.platform == 'macos-latest'
         run: |
-          DMG=$(find "app/src-tauri/target/${{ matrix.target }}/release/bundle/dmg" -type f -name "*.dmg" | head -1)
+          DMG=$(find "src-tauri/target/${{ matrix.target }}/release/bundle/dmg" -type f -name "*.dmg" | head -1)
           test -n "$DMG"
           MOUNT_DIR=$(mktemp -d)
           trap 'hdiutil detach "$MOUNT_DIR" >/dev/null 2>&1 || true; rm -rf "$MOUNT_DIR"' EXIT
@@ -104,14 +97,14 @@ jobs:
       - name: Get version
         id: version
         run: |
-          VERSION=$(grep '"version"' app/src-tauri/tauri.conf.json | head -1 | sed 's/.*: *"\(.*\)".*/\1/')
+          VERSION=$(grep '"version"' src-tauri/tauri.conf.json | head -1 | sed 's/.*: *"\(.*\)".*/\1/')
           echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Collect Windows artifacts
         if: matrix.platform == 'windows-latest'
         shell: pwsh
         run: |
-          $exeFile = Get-ChildItem -Path "app/src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*-setup.exe" | Select-Object -First 1
+          $exeFile = Get-ChildItem -Path "src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*-setup.exe" | Select-Object -First 1
           $newName = "nexinmap-downloader_${{ steps.version.outputs.VERSION }}_windows_x64-setup.exe"
           Copy-Item $exeFile.FullName -Destination $newName
 
@@ -119,15 +112,15 @@ jobs:
         if: matrix.platform == 'macos-latest'
         run: |
           ARCH=$([[ "${{ matrix.target }}" == *aarch64* ]] && echo "arm64" || echo "x64")
-          DMG=$(find "app/src-tauri/target/${{ matrix.target }}/release/bundle/dmg" -name "*.dmg" | head -1)
+          DMG=$(find "src-tauri/target/${{ matrix.target }}/release/bundle/dmg" -name "*.dmg" | head -1)
           NEW_NAME="nexinmap-downloader_${{ steps.version.outputs.VERSION }}_macos_${ARCH}.dmg"
           cp "$DMG" "$NEW_NAME"
 
       - name: Collect Linux artifacts
         if: matrix.platform == 'ubuntu-22.04'
         run: |
-          DEB=$(find "app/src-tauri/target/${{ matrix.target }}/release/bundle/deb" -name "*.deb" | head -1)
-          APPIMAGE=$(find "app/src-tauri/target/${{ matrix.target }}/release/bundle/appimage" -name "*.AppImage" | head -1)
+          DEB=$(find "src-tauri/target/${{ matrix.target }}/release/bundle/deb" -name "*.deb" | head -1)
+          APPIMAGE=$(find "src-tauri/target/${{ matrix.target }}/release/bundle/appimage" -name "*.AppImage" | head -1)
           cp "$DEB" "nexinmap-downloader_${{ steps.version.outputs.VERSION }}_linux_amd64.deb"
           cp "$APPIMAGE" "nexinmap-downloader_${{ steps.version.outputs.VERSION }}_linux_amd64.AppImage"
 
@@ -141,83 +134,40 @@ jobs:
   release:
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Get version
+        id: version
+        run: |
+          VERSION=$(grep '"version"' src-tauri/tauri.conf.json | head -1 | sed 's/.*: *"\(.*\)".*/\1/')
+          echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
+          if [[ "$VERSION" == *"-"* ]]; then
+            echo "PRERELEASE=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "PRERELEASE=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts
           merge-multiple: true
 
-      - name: Publish to Gitee Release
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.VERSION }}
+          name: nexinmap-downloader v${{ steps.version.outputs.VERSION }}
+          prerelease: ${{ steps.version.outputs.PRERELEASE == 'true' }}
+          files: artifacts/*
+          body: |
+            本次升级不会删除已有任务、历史记录、输出文件、下载范围书签、设置或瓦片缓存。
+            Windows、Linux、macOS Intel 和 Apple Silicon 安装包由 GitHub Actions 构建。
+            macOS 安装包尚未进行 Apple Developer ID 签名与公证，部分系统仍可能显示安全提示。
         env:
-          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
-        run: |
-          set -euo pipefail
-          if [ -z "${GITEE_TOKEN}" ]; then
-            echo "缺少 Actions Secret：GITEE_TOKEN"
-            exit 1
-          fi
-          git clone --depth 1 --branch main \
-            "https://oauth2:${GITEE_TOKEN}@gitee.com/liu-bofang/nexin-map-download.git" \
-            app
-          VERSION=$(grep '"version"' app/src-tauri/tauri.conf.json | head -1 | sed 's/.*: *"\(.*\)".*/\1/')
-          TAG="v${VERSION}"
-          echo "Publishing ${TAG}"
-          ls -la artifacts
-
-          rm -rf rel
-          git clone "https://oauth2:${GITEE_TOKEN}@gitee.com/liu-bofang/nexin-map-download-releases.git" rel
-          cd rel
-          git checkout -B main
-          if ! git rev-parse HEAD >/dev/null 2>&1; then
-            echo "Release packages only. Source code is not stored in this repository." > README.md
-            git add README.md
-            git -c user.email="ci@users.noreply.github.com" -c user.name="nexinmap-downloader-ci" commit -m "init release repository"
-            git push -u origin main
-          fi
-          git tag -f "${TAG}"
-          git push -f origin "${TAG}"
-          cd ..
-
-          BODY=$(printf '%s\n' \
-            "本次升级不会删除已有任务、历史记录、输出文件、下载范围书签、设置或瓦片缓存。" \
-            "Windows、Linux、macOS Intel 和 Apple Silicon 安装包由 GitHub Actions 构建。" \
-            "macOS 安装包尚未进行 Apple Developer ID 签名与公证，部分系统仍可能显示安全提示。")
-          PRERELEASE=false
-          if [[ "${VERSION}" == *-* ]]; then
-            PRERELEASE=true
-          fi
-
-          CREATE=$(curl -sS -X POST "https://gitee.com/api/v5/repos/liu-bofang/nexin-map-download-releases/releases" \
-            --data-urlencode "access_token=${GITEE_TOKEN}" \
-            --data-urlencode "tag_name=${TAG}" \
-            --data-urlencode "name=nexinmap-downloader ${TAG}" \
-            --data-urlencode "target_commitish=main" \
-            --data-urlencode "prerelease=${PRERELEASE}" \
-            --data-urlencode "body=${BODY}")
-          ID=$(printf '%s' "${CREATE}" | jq -r '.id // empty')
-          if [ -z "${ID}" ]; then
-            EXISTING=$(curl -sS "https://gitee.com/api/v5/repos/liu-bofang/nexin-map-download-releases/releases/tags/${TAG}?access_token=${GITEE_TOKEN}")
-            ID=$(printf '%s' "${EXISTING}" | jq -r '.id // empty')
-          fi
-          if [ -z "${ID}" ]; then
-            echo "创建 Gitee Release 失败"
-            printf '%s\n' "${CREATE}" | jq -r '.message // .'
-            exit 1
-          fi
-
-          shopt -s nullglob
-          files=(artifacts/*)
-          if [ ${#files[@]} -eq 0 ]; then
-            echo "没有找到安装包"
-            exit 1
-          fi
-          for file in "${files[@]}"; do
-            echo "Uploading $(basename "${file}")"
-            curl -sS -f -X POST \
-              "https://gitee.com/api/v5/repos/liu-bofang/nexin-map-download-releases/releases/${ID}/attach_files" \
-              -F "access_token=${GITEE_TOKEN}" \
-              -F "file=@${file}" \
-              >/dev/null
-          done
-          echo "已发布到 https://gitee.com/liu-bofang/nexin-map-download-releases/releases/tag/${TAG}"
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
