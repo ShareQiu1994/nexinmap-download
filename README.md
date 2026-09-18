@@ -1,7 +1,33 @@
-# nexinmap-downloader-ci
+# 宁行地图助手
 
-公开仓库，只负责编译并发布安装包。产品源码在私有仓库 [nexinmap-downloader](https://github.com/ShareQiu1994/nexinmap-downloader)。
+桌面地图下载与转换工具。在地图上圈定范围，下载影像、高程、历史影像、三维瓦片和矢量数据，并在本地做格式转换。
 
-在 Actions 里手动运行 **Build installers**。流水线用 Secret `SOURCE_TOKEN` 读取私有源码，在 GitHub 的 Windows、Linux、macOS 上编译，再把安装包挂到本仓库的 Releases。
+当前版本：[0.1.0](https://github.com/ShareQiu1994/nexinmap-downloader-ci/releases/tag/v0.1.0)
 
-检查更新先读镜像 `https://nexinmap.com/packages/latest/update.json`，打不开再读 GitHub Release。
+支持 Windows、Linux、macOS Intel 和 Apple Silicon。macOS 安装包尚未进行 Apple Developer ID 签名与公证，部分系统仍可能显示安全提示。
+
+## 下载
+
+- 影像、DEM 高程：矩形、多边形、椭圆选范围，支持多级别、自定义图源和断点续传
+- Wayback 历史影像：时间轴浏览与增量下载
+- 3D Tiles：在线下载和本地预览
+- MVT 矢量切片（需自定义图源）
+- OSM 道路、建筑、POI 等矢量数据
+
+## 地图与范围
+
+- 第一次打开默认使用高德卫星图
+- 按国家、省、市、区县检索行政区并加载边界
+- 导入范围、使用当前屏幕范围
+- 测距、测面、坐标拾取、坐标定位
+
+## 工具
+
+- 栅格与瓦片互转、瓦片转 ArcGIS、瓦片与 MBTiles 互转
+- 矢量转换、文件坐标转换、高斯计算
+
+## 任务与授权
+
+- 任务可以暂停、继续。升级不会删除已有任务、历史记录、输出文件、下载范围书签、设置或瓦片缓存
+- 未授权时不能下载，也不能使用工具转换。可以申请试用，或购买 90 天、180 天、365 天和永久授权
+- 在「关于」里检查更新。国内优先从 [nexinmap.com](https://nexinmap.com/packages/latest/update.json) 获取安装包，打不开时再使用本仓库的 Releases
