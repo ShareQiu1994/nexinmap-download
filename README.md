@@ -2,7 +2,7 @@
 
 桌面地图下载与转换工具。在地图上圈定范围，下载影像、高程、历史影像、三维瓦片和矢量数据，并在本地做格式转换。
 
-当前版本：[0.1.0](https://github.com/ShareQiu1994/nexinmap-download/releases/tag/v0.1.0)
+当前版本：[0.2.0](https://github.com/ShareQiu1994/nexinmap-download/releases/tag/v0.2.0)
 
 支持 Windows、Linux、macOS Intel 和 Apple Silicon。
 

@@ -183,6 +183,16 @@ jobs:
           path: artifacts
           merge-multiple: true
 
+      - name: Prepare release notes
+        run: |
+          NOTES="app/docs/release-notes/release-notes-v${{ steps.version.outputs.VERSION }}.md"
+          if [ ! -f "$NOTES" ]; then
+            echo "缺少发布说明：$NOTES"
+            echo "请在私有源码仓库提交 docs/release-notes/release-notes-v<版本>.md 后再发布。"
+            exit 1
+          fi
+          cp "$NOTES" release-notes.md
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -190,10 +200,7 @@ jobs:
           name: nexinmap-downloader v${{ steps.version.outputs.VERSION }}
           prerelease: ${{ steps.version.outputs.PRERELEASE == 'true' }}
           files: artifacts/*
-          body: |
-            本次升级不会删除已有任务、历史记录、输出文件、下载范围书签、设置或瓦片缓存。
-            Windows、Linux、macOS Intel 和 Apple Silicon 安装包由 GitHub Actions 构建。
-            macOS 安装包尚未进行 Apple Developer ID 签名与公证，部分系统仍可能显示安全提示。
+          body_path: release-notes.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
